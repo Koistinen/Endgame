@@ -11,29 +11,53 @@ typedef uint64_t Bitboard;
 typedef int8_t Byte;
 const char *PIECECHARS="K";
 
+#define Bit(B) (1ull<<B)
+
 void
 mark_legal(Byte *tb, int n, char *piece_types)
 {
   int piece[33]; /* position of pieces */
   int wtm;
   int i;
+  int illegal_count = 0;
+  int legal_count = 0;
+  int position_count = 0;
 
   for(wtm=2;wtm--;) {
-    piece[n]=1;
+    /* init piece table */
+    piece[n]=1; /* extra piece to mark end */
     for(i=n;i--;) piece[i] = 077;
+
+    /* for each position */
     while(piece[n]) {
+      /* compute table index for position */
       int pos = wtm<<(6*n);
       for(i=n;i--;) {
 	pos += piece[i]<<(6*i);
       }
+
       {
-	tb[pos] = 0;
+	Byte value = 101; /* legal position */
+	Bitboard oc=0;
+	for(i=n;i--;) {
+	  Bitboard bb = Bit(piece[i]);
+	  if(oc&bb) value = -1; /* illegal */
+	  oc |= bb;
+	}
+	if (101 == value) ++legal_count;
+	if (-1 == value) ++illegal_count;
+	++position_count;
+	tb[pos] = value;
       }
+
+      /* decrement to next position */
       for(i=0;!piece[i]--;) {
 	piece[i++] = 077;
       }
     }
   }
+  printf("%d legal and %d illegal out of %d positions when initializing.\n",
+	 legal_count, illegal_count, position_count);
 }
 
 int
@@ -74,6 +98,7 @@ main(int argc, char *argv[])
   /* compute */
   mark_legal(tb, n, argv[1]);
   
+  /* write result */
   fd = creat(argv[1], 00666);
   if (sz!=write(fd, tb, sz)) {
     printf("Error: Failed to write the table properly.\n");
