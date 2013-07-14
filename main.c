@@ -11,48 +11,142 @@ typedef uint64_t Bitboard;
 typedef int8_t Byte;
 const char *PIECECHARS="K";
 
-#define Bit(B) (1ull<<B)
-
-void
-mark_legal(Byte *tb, int n, char *piece_types)
-{
+typedef struct {
   int piece[33]; /* position of pieces */
   int wtm;
+  char *type;
+  int side[33]; /* 0: black, 1: white */
+  int n;
+  int kings[2]; /* black at 0, white at 1 */
+} Position;
+
+Bitboard
+bit(int n) {
+  return 1ull<<n;
+}
+
+void
+BB_print(Bitboard bb) {
+  int rank;
+  int file;
+  printf("========\n");
+  for (rank=8;rank--;) {
+    for (file=0;file<8;++file)
+      printf("%c", "*-"[!(bb&bit(rank*8+file))]);
+    printf("\n");
+  }
+}
+
+Bitboard
+occupied(Position *p)
+{
+  Bitboard oc = 0;
+  int i;
+
+  for(i=p->n;i--;)
+    oc |= bit(p->piece[i]);
+
+  return oc;
+}
+
+int
+pos_offset(Position *p)
+{
+  /* compute table index for position */
+  int i;
+  int value = p->wtm<<(6*p->n);
+  for(i=p->n;i--;) {
+    value += p->piece[i]<<(6*i);
+  }
+  return value;
+}
+
+void
+mark_check(Byte *tb, Position *p, int mover, int checked, int value)
+{
+  int ind;
+  int sq = p->piece[mover];
+  Bitboard mv = 0;
+
+  switch (p->type[mover]) {
+  case 'K':
+    mv = bit(sq);
+  if (7!=(sq&7)) /* not next to left side */
+      mv |= mv << 1;
+  if (sq&7) /* not next to right side */
+      mv |= (mv >> 1);
+    mv |= (mv<<8) | (mv>>8); /* up or down no problem as moves off board are also shifted out */
+    mv ^= bit(sq); /* remove move to same square */
+  printf("debug %o\n",sq);
+  BB_print(mv); /* debug */
+    break;
+  default:
+    printf("Internal error! Can't generate moves for unknown piece.\n");
+    exit(1);
+  }
+
+  for (sq=64;sq--;) {
+    if (mv&bit(sq)) {
+      p->piece[checked] = sq;
+      ind = pos_offset(p);
+      if (-1 != tb[ind]) /* don't remove illegal position value */
+	tb[ind] = value;
+    }
+  }
+}
+
+void
+count_positions(Byte *tb, int n) {
+  int count[256];
+  int i;
+
+  for (i=256;i--;) count[i] = 0;
+  for (i=n;i--;) ++count[0xff&tb[i]];
+  for (i=256;i--;)
+    if (count[i])
+      printf("%3d: %15d\n", (Byte)i, count[i]);
+}
+
+void
+mark_legal(Byte *tb, Position *p)
+{
   int i;
   int illegal_count = 0;
   int legal_count = 0;
   int position_count = 0;
 
-  for(wtm=2;wtm--;) {
+  for(p->wtm=2;p->wtm--;) { /* iterate over wtm and btm */
     /* init piece table */
-    piece[n]=1; /* extra piece to mark end */
-    for(i=n;i--;) piece[i] = 077;
+    p->piece[p->n]=1; /* extra piece to mark end */
+    for(i=p->n;i--;) p->piece[i] = 077;
 
     /* for each position */
-    while(piece[n]) {
-      /* compute table index for position */
-      int pos = wtm<<(6*n);
-      for(i=n;i--;) {
-	pos += piece[i]<<(6*i);
-      }
-
+    while(p->piece[p->n]) {
       {
 	Byte value = 101; /* legal position */
 	Bitboard oc=0;
-	for(i=n;i--;) {
-	  Bitboard bb = Bit(piece[i]);
+	for(i=p->n;i--;) {
+	  Bitboard bb = bit(p->piece[i]);
 	  if(oc&bb) value = -1; /* illegal */
 	  oc |= bb;
 	}
 	if (101 == value) ++legal_count;
 	if (-1 == value) ++illegal_count;
 	++position_count;
-	tb[pos] = value;
+	tb[pos_offset(p)] = value;
       }
+      if (0 == p->piece[p->kings[!p->wtm]]) { /* nonmoving king at square 0 */
+	  for (i=p->n;i--;) {
+	    if (p->side[i]==p->wtm) { /* piece i to move */
+	      mark_check(tb, p, i, p->kings[!p->wtm], -1); /* illegal for king not on move to be in check */
+	    }
+	  }
+	  p->piece[p->kings[!p->wtm]] = 0; /* reset nonmoving kings position */
+	}
 
       /* decrement to next position */
-      for(i=0;!piece[i]--;) {
-	piece[i++] = 077;
+      for(i=0;!p->piece[i]--;) {
+	p->piece[i++] = 077;
       }
     }
   }
@@ -64,25 +158,35 @@ int
 main(int argc, char *argv[])
 {
   Byte *tb;
-  int n;
   int i;
   int kings=0;
   int fd;
   int sz;
+  Position *p;
+  
 
   if (2 != argc) {
     printf("usage: %s KXKY\n", argv[0]);
     exit(1);
   }
   
-  n = strlen(argv[1]);
-  for(i=n;i--;) {
+  p = malloc(sizeof(Position));
+  p->type = argv[1];
+  p->n = strlen(argv[1]);
+  if (32 < p->n) {
+    printf("Sorry, no way I can compute endings with %d pieces.\n", p->n);
+    exit(1);
+  }
+
+  for(i=p->n;i--;) {
     char piece = argv[1][i];
     if (NULL==strchr(PIECECHARS, piece)) {
       printf("Sorry, \"%c\" is an unknown piece type. Try one of \"%s\".\n", piece, PIECECHARS);
       exit(1);
     }
+    p->side[i] = kings; /* 0: black, 1: white */
     if ('K' == piece) {
+      p->kings[kings] = i;
       ++kings;
     }
   }
@@ -90,14 +194,15 @@ main(int argc, char *argv[])
     printf("Sorry, endings with %d kings don't make sense to me. Try one with 2.\n", kings);
     exit(1);
   }
-  printf("Ending %s has %d men!\n", argv[1], n);
-  sz = 2<<(6*n);
+  printf("Ending %s has %d men!\n", argv[1], p->n);
+  sz = 2<<(6*p->n);
   tb = malloc(sz);
   printf("Table has %d bytes.\n", sz);
 
   /* compute */
-  mark_legal(tb, n, argv[1]);
+  mark_legal(tb, p);
   
+  count_positions(tb, sz);
   /* write result */
   fd = creat(argv[1], 00666);
   if (sz!=write(fd, tb, sz)) {
