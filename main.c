@@ -9,14 +9,14 @@
 
 typedef uint64_t Bitboard;
 typedef int8_t Byte;
-const char *PIECECHARS="K";
+const char *PIECECHARS="KR";
 
 typedef struct {
   int piece[33]; /* position of pieces */
-  int wtm;
-  char *type;
+  int wtm; /* flag saying if white is to move */
+  char *type; /* piece types, KQ etc. */
   int side[33]; /* 0: black, 1: white */
-  int n;
+  int n; /* number of pieces */
   int kings[2]; /* black at 0, white at 1 */
 } Position;
 
@@ -67,6 +67,7 @@ mark_check(Byte *tb, Position *p, int mover, int checked, int value)
   int ind;
   int sq = p->piece[mover];
   Bitboard mv = 0;
+  Bitboard bb, oc;
 
   switch (p->type[mover]) {
   case 'K':
@@ -77,13 +78,31 @@ mark_check(Byte *tb, Position *p, int mover, int checked, int value)
       mv |= (mv >> 1);
     mv |= (mv<<8) | (mv>>8); /* up or down no problem as moves off board are also shifted out */
     mv ^= bit(sq); /* remove move to same square */
-  printf("debug %o\n",sq);
-  BB_print(mv); /* debug */
     break;
-  default:
-    printf("Internal error! Can't generate moves for unknown piece.\n");
+  case 'R':
+    oc = occupied(p);
+    /* checked king at a1 (square 0) is not a problem as it will block no move */
+    for (bb = bit(sq); (bb>>=1) & 0x7f7f7f7f7f7f7f7full;) { /* moving west */
+      mv |= bb;
+      if (bb&oc) break; /* not moving through pieces */
+    }
+    for (bb = bit(sq); (bb<<=1) & 0xfefefefefefefefeull;) { /* moving east */
+      mv |= bb;
+      if (bb&oc) break; /* not moving through pieces */
+    }
+    for (bb = bit(sq); bb>>=8;) { /* moving south */
+      mv |= bb;
+      if (bb&oc) break; /* not moving through pieces */
+    }
+    for (bb = bit(sq); bb<<=8;) { /* moving north */
+      mv |= bb;
+      if (bb&oc) break; /* not moving through pieces */
+    }
+    break;
+    default:
+    printf("Internal error! Can't generate moves for unknown piece \"%c\".\n", p->type[mover]);
     exit(1);
-  }
+    }
 
   for (sq=64;sq--;) {
     if (mv&bit(sq)) {
@@ -161,7 +180,7 @@ main(int argc, char *argv[])
   int i;
   int kings=0;
   int fd;
-  int sz;
+  size_t sz;
   Position *p;
   
 
@@ -195,9 +214,9 @@ main(int argc, char *argv[])
     exit(1);
   }
   printf("Ending %s has %d men!\n", argv[1], p->n);
-  sz = 2<<(6*p->n);
+  sz = 2ll<<(6*p->n);
   tb = malloc(sz);
-  printf("Table has %d bytes.\n", sz);
+  printf("Table has %ld bytes.\n", sz);
 
   /* compute */
   mark_legal(tb, p);
@@ -205,7 +224,14 @@ main(int argc, char *argv[])
   count_positions(tb, sz);
   /* write result */
   fd = creat(argv[1], 00666);
-  if (sz!=write(fd, tb, sz)) {
+  while (sz>(1<<24)) {
+    if ((1<<24)!=write(fd, tb, 1<<24)) {
+      printf("Error: Failed to write the table properly.\n");
+      exit(1);
+    }
+    sz -= 1<<24; tb += 1<<24;
+  }
+  if (sz!=(size_t)write(fd, tb, sz)) {
     printf("Error: Failed to write the table properly.\n");
     exit(1);
   }
