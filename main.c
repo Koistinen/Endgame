@@ -12,23 +12,23 @@ typedef int8_t Byte;
 const char *PIECECHARS="KR";
 
 typedef struct {
-  int piece[33]; /* position of pieces */
-  int wtm; /* flag saying if white is to move */
+  int64_t piece[33]; /* position of pieces */
+  int64_t wtm; /* flag saying if white is to move */
   char *type; /* piece types, KQ etc. */
-  int side[33]; /* 0: black, 1: white */
+  int64_t side[33]; /* 0: black, 1: white */
   int n; /* number of pieces */
-  int kings[2]; /* black at 0, white at 1 */
+  int64_t kings[2]; /* black at 0, white at 1 */
 } Position;
 
 Bitboard
-bit(int n) {
+bit(int64_t n) {
   return 1ull<<n;
 }
 
 void
 BB_print(Bitboard bb) {
-  int rank;
-  int file;
+  int64_t rank;
+  int64_t file;
   printf("========\n");
   for (rank=8;rank--;) {
     for (file=0;file<8;++file)
@@ -41,7 +41,7 @@ Bitboard
 occupied(Position *p)
 {
   Bitboard oc = 0;
-  int i;
+  int64_t i;
 
   for(i=p->n;i--;)
     oc |= bit(p->piece[i]);
@@ -49,52 +49,50 @@ occupied(Position *p)
   return oc;
 }
 
-int
+int64_t
 pos_offset(Position *p)
 {
   /* compute table index for position */
-  int i;
-  int value = p->wtm<<(6*p->n);
+  int64_t i;
+  int64_t value = p->wtm<<(6*p->n);
   for(i=p->n;i--;) {
     value += p->piece[i]<<(6*i);
   }
   return value;
 }
 
-void
-mark_check(Byte *tb, Position *p, int mover, int checked, int value)
+Bitboard
+gen_moves(Position *p, int64_t mover, Bitboard oc)
 {
-  int ind;
-  int sq = p->piece[mover];
   Bitboard mv = 0;
-  Bitboard bb, oc;
-
+  Bitboard bb;
+  int64_t from = p->piece[mover];
+  
   switch (p->type[mover]) {
   case 'K':
-    mv = bit(sq);
-  if (7!=(sq&7)) /* not next to left side */
+    mv = bit(from);
+    if (7!=(from&7)) /* not next to left side */
       mv |= mv << 1;
-  if (sq&7) /* not next to right side */
+    if (from&7) /* not next to right side */
       mv |= (mv >> 1);
     mv |= (mv<<8) | (mv>>8); /* up or down no problem as moves off board are also shifted out */
-    mv ^= bit(sq); /* remove move to same square */
+    mv ^= bit(from); /* remove move to same square */
     break;
   case 'R':
-    oc = occupied(p);
     /* checked king at a1 (square 0) is not a problem as it will block no move */
-    for (bb = bit(sq); (bb>>=1) & 0x7f7f7f7f7f7f7f7full;) { /* moving west */
+    for (bb = bit(from); (bb>>=1) & 0x7f7f7f7f7f7f7f7full;) { /* moving west */
       mv |= bb;
       if (bb&oc) break; /* not moving through pieces */
     }
-    for (bb = bit(sq); (bb<<=1) & 0xfefefefefefefefeull;) { /* moving east */
+    for (bb = bit(from); (bb<<=1) & 0xfefefefefefefefeull;) { /* moving east */
       mv |= bb;
       if (bb&oc) break; /* not moving through pieces */
     }
-    for (bb = bit(sq); bb>>=8;) { /* moving south */
+    for (bb = bit(from); bb>>=8;) { /* moving south */
       mv |= bb;
       if (bb&oc) break; /* not moving through pieces */
     }
-    for (bb = bit(sq); bb<<=8;) { /* moving north */
+    for (bb = bit(from); bb<<=8;) { /* moving north */
       mv |= bb;
       if (bb&oc) break; /* not moving through pieces */
     }
@@ -102,7 +100,17 @@ mark_check(Byte *tb, Position *p, int mover, int checked, int value)
     default:
     printf("Internal error! Can't generate moves for unknown piece \"%c\".\n", p->type[mover]);
     exit(1);
-    }
+  }
+  return mv;
+}
+
+void
+mark_check(Byte *tb, Position *p, int64_t mover, int64_t checked, int64_t value)
+{
+  int64_t ind;
+  int64_t sq;
+  Bitboard oc = occupied(p);
+  Bitboard mv = gen_moves(p, mover, oc);
 
   for (sq=64;sq--;) {
     if (mv&bit(sq)) {
@@ -115,24 +123,24 @@ mark_check(Byte *tb, Position *p, int mover, int checked, int value)
 }
 
 void
-count_positions(Byte *tb, int n) {
-  int count[256];
-  int i;
+count_positions(Byte *tb, int64_t n) {
+  int64_t count[256];
+  int64_t i;
 
   for (i=256;i--;) count[i] = 0;
   for (i=n;i--;) ++count[0xff&tb[i]];
   for (i=256;i--;)
     if (count[i])
-      printf("%3d: %15d\n", (Byte)i, count[i]);
+      printf("%3d: %15ld\n", (Byte)i, count[i]);
 }
 
 void
 mark_legal(Byte *tb, Position *p)
 {
-  int i;
-  int illegal_count = 0;
-  int legal_count = 0;
-  int position_count = 0;
+  int64_t i;
+  int64_t illegal_count = 0;
+  int64_t legal_count = 0;
+  int64_t position_count = 0;
 
   for(p->wtm=2;p->wtm--;) { /* iterate over wtm and btm */
     /* init piece table */
@@ -169,7 +177,7 @@ mark_legal(Byte *tb, Position *p)
       }
     }
   }
-  printf("%d legal and %d illegal out of %d positions when initializing.\n",
+  printf("%ld legal and %ld illegal out of %ld positions when initializing.\n",
 	 legal_count, illegal_count, position_count);
 }
 
@@ -177,7 +185,7 @@ int
 main(int argc, char *argv[])
 {
   Byte *tb;
-  int i;
+  int64_t i;
   int kings=0;
   int fd;
   size_t sz;
@@ -214,7 +222,7 @@ main(int argc, char *argv[])
     exit(1);
   }
   printf("Ending %s has %d men!\n", argv[1], p->n);
-  sz = 2ll<<(6*p->n);
+  sz = sizeof(Byte)<<(1+6*p->n);
   tb = malloc(sz);
   printf("Table has %ld bytes.\n", sz);
 
@@ -226,13 +234,13 @@ main(int argc, char *argv[])
   fd = creat(argv[1], 00666);
   while (sz>(1<<24)) {
     if ((1<<24)!=write(fd, tb, 1<<24)) {
-      printf("Error: Failed to write the table properly.\n");
+      printf("Error: Failed to write the %s table properly.\n", argv[1]);
       exit(1);
     }
     sz -= 1<<24; tb += 1<<24;
   }
   if (sz!=(size_t)write(fd, tb, sz)) {
-    printf("Error: Failed to write the table properly.\n");
+    printf("Error: Failed to write the %s table properly.\n", argv[1]);
     exit(1);
   }
 
