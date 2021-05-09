@@ -10,5 +10,5 @@ Balance initial computation time, storage and answer time.
 
 n is number of pieces including kings and pawns.
 Steps:
-* Make computation simple and about O(n*S), storage S=2*64**n bytes per class (Say KQvK) and answer time pretty quick.
+* Make computation simple and about O(n*S), storage S=2*(64**n) bytes per class (Say KQvK) and answer time pretty quick.
 * improve
