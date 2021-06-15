@@ -1,0 +1,120 @@
+Goals of the basic algorithm
+It should be easy to understand and turn into code.
+It should not make adding optimizations difficult,
+i.e. no premature optimizations.
+
+50 move rule applies.
+
+Motivation
+It is the quickest and is simple to extend to infinity.
+Modifying to distance to mate or distance to conversion is not difficult.
+
+
+Black is the losing side.
+
+Motivation
+It is the traditional side to win in chess problems.
+Only computing wins for one side means fewer bits are needed at a time.
+It is easy to flip colours.
+Once both sides are computed, they can be combined into a single table for the
+storage benefits that might be there.
+
+
+Indexing index of the square in octal
+  A  B  C  D  E  F  G  H
+8 72 02 12 22 23 13 03 73
+7 06 62 32 42 43 33 63 07
+6 16 36 66 52 53 67 47 17
+5 26 46 56 76 77 57 47 27
+4 24 44 54 74 75 55 45 25
+3 14 34 64 50 51 65 45 15
+2 04 60 30 40 41 31 61 05
+1 70 00 10 20 21 11 01 71
+
+Motivation
+Indexing the squares this way keeps the first digit constant when mirroring.
+a1 and d4 sharing the same first digit allows a minor optimization and does not
+make the system harder to understand.
+
+
+Without pawns the black king is indexed in decimal with:
+  A B C D
+4       9
+3     7 8
+2   4 5 6
+1 0 1 2 3
+
+Motivation
+It is simple and adds 25% to the size of the table.
+Optimizing for the mirroring of the diagonal can be done later.
+
+White pawns are indexed in octal with:
+  A  B  C  D  E  F  G  H
+8
+7 57 56 55 54 50 51 52 53
+6 47 46 45 44 40 41 42 43
+5 37 36 35 34 30 31 32 33
+4 27 26 25 24 20 21 22 23
+3 17 16 15 14 10 11 12 13
+2 07 06 05 04 00 01 02 03
+1
+
+Black pawns are indexed in octal with:
+  A  B  C  D  E  F  G  H
+8
+7 07 06 05 04 00 01 02 03
+6 17 16 15 14 10 11 12 13
+5 27 26 25 24 20 21 22 23
+4 37 36 35 34 30 31 32 33
+3 47 46 45 44 40 41 42 43
+2 57 56 55 54 50 51 52 53
+1
+
+First pawn is indexed with bit 2 set
+
+Index is constructed by joining the bits in most significant bits first:
+Pawns,
+first 3 bits of black and white pieces interleaved,
+remaining bits.
+
+The main bit tables used are
+bn: black loses with g50=n but not with less
+wn: white wins with g50=n
+b0: black check mate
+w0: all zeroes
+
+The bn tables are sparse and zeroes can be stored in 3.14 bits per position
+using bytes to encode length to next set bit.
+Ones use at most 1 extra byte per position.
+
+For each pawn position, starting at 57 and decrementing, with each pawn of the
+  same position having a lesser value than the previous
+For g50=1 to 100
+
+  Calculate b(g50)
+    if g50=1, no legal move without capture or pawn move and all and at least
+      one capture or pawn move lose
+    if g50>1, no legal move(including capture or pawn move) avoids loss and at
+      least one move was turned into a loss by the latest increment of g50
+
+  Calculate w(g50)
+    any capture or pawn move, or any move into b(g50-1) wins, or w(g50-1)
+
+  Leave lower bits for later, this to allow a certain minimum block size,
+    say 25 lower bits means minimum block size is 4 MiB
+  For each value of white upper bits
+    For each black piece px,
+      For each value of upper bits, excluding those of px,
+        For each position
+          Store if any move avoids loss and if it might be a new loss (2 bits)
+    For each position
+      b(g50)=is new loss (using stored values)
+
+  For each value of black upper bits
+    For each white piece px,
+      For each value of upper bits, excluding those of px,
+        For each position
+          Store if any win into b(g50-1)
+    For each position
+      w(g50)=w(g50-1) or new win (using stored values)
+
