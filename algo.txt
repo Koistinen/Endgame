@@ -2,6 +2,11 @@ Goals of the basic algorithm
 It should be easy to understand and turn into code.
 It should not make adding optimizations difficult,
 i.e. no premature optimizations.
+Purpose of the index scheme is to improve locality of data and allow a large
+block size.
+A large block size should help performance and reduce wear and tear of disk.
+The improved locality means the ram use can be limited which allows optimizing
+for ram, cache and decentralized computing.
 
 50 move rule applies.
 
@@ -13,14 +18,14 @@ Modifying to distance to mate or distance to conversion is not difficult.
 Black is the losing side.
 
 Motivation
-It is the traditional side to win in chess problems.
+White is the traditional side to win in chess problems.
 Only computing wins for one side means fewer bits are needed at a time.
 It is easy to flip colours.
 Once both sides are computed, they can be combined into a single table for the
 storage benefits that might be there.
 
 
-Indexing index of the square in octal
+Piece position index
   A  B  C  D  E  F  G  H
 8 72 02 12 22 23 13 03 73
 7 06 62 32 42 43 33 63 07
@@ -32,7 +37,7 @@ Indexing index of the square in octal
 1 70 00 10 20 21 11 01 71
 
 Motivation
-Indexing the squares this way keeps the first digit constant when mirroring.
+Indexing the positions this way keeps the first digit constant when mirroring.
 a1 and d4 sharing the same first digit allows a minor optimization and does not
 make the system harder to understand.
 
@@ -48,7 +53,7 @@ Motivation
 It is simple and adds 25% to the size of the table.
 Optimizing for the mirroring of the diagonal can be done later.
 
-White pawns are indexed in octal with:
+White pawn positions are indexed in octal with:
   A  B  C  D  E  F  G  H
 8
 7 57 56 55 54 50 51 52 53
@@ -59,7 +64,7 @@ White pawns are indexed in octal with:
 2 07 06 05 04 00 01 02 03
 1
 
-Black pawns are indexed in octal with:
+Black pawn positions are indexed in octal with:
   A  B  C  D  E  F  G  H
 8
 7 07 06 05 04 00 01 02 03
@@ -71,6 +76,10 @@ Black pawns are indexed in octal with:
 1
 
 First pawn is indexed with bit 2 set
+
+Motivation for indexing pawn positions that way: 
+With pawns present, only columns are mirrored and the indexing allows iterating
+in the right order more easily. (Perhaps not very important.)
 
 Index is constructed by joining the bits in most significant bits first:
 Pawns,
